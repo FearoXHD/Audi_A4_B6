@@ -9,14 +9,6 @@
     tools:context=".MainActivity2">
 
 
-
-    <Button
-        android:id="@+id/connectButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="Connect to ESP32"
-        android:layout_centerInParent="true" />
-
 <TextView
         android:id="@+id/textView"
         android:layout_width="94dp"
@@ -124,7 +116,7 @@
             android:layout_weight="1"
             android:backgroundTint="#00FFFFFF"
             android:visibility="visible"
-            app:srcCompat="@drawable/ic_unlock" />
+            app:srcCompat="@drawable/ic_unlock"/>
 
         <ImageButton
             android:id="@+id/lock_Button"

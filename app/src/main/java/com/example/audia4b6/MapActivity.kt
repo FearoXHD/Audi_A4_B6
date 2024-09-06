@@ -1,3 +1,5 @@
+package com.example.audia4b6
+
 import android.content.Intent
 import android.os.Bundle
 import android.widget.ImageButton
@@ -11,7 +13,7 @@ import com.example.audia4b6.MainActivity
 import com.example.audia4b6.R
 
 
-class MainActivity2 : AppCompatActivity(), OnMapReadyCallback {
+class MapActivity : AppCompatActivity(), OnMapReadyCallback {
 
     private lateinit var mapView: MapView
     private var googleMap: GoogleMap? = null
