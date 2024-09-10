@@ -6,10 +6,10 @@
     android:id="@+id/main"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context=".MainActivity2">
+    tools:context="com.example.audia4b6.MainActivity">
 
 
-<TextView
+    <TextView
         android:id="@+id/textView"
         android:layout_width="94dp"
         android:layout_height="31dp"
@@ -41,10 +41,12 @@
 
     <LinearLayout
         android:id="@+id/linearLayout3"
-        android:layout_width="364dp"
+        android:layout_width="0dp"
         android:layout_height="61dp"
         android:layout_marginTop="1dp"
         android:orientation="horizontal"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/linearLayout2">
 
         <ImageButton
@@ -75,14 +77,15 @@
 
     <LinearLayout
         android:id="@+id/linearLayout"
-        android:layout_width="360dp"
+        android:layout_width="0dp"
         android:layout_height="82dp"
         android:layout_marginTop="484dp"
         android:layout_marginBottom="141dp"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:layout_editor_absoluteX="-2dp">
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
 
         <ProgressBar
             android:id="@+id/progressBar2"
@@ -116,7 +119,7 @@
             android:layout_weight="1"
             android:backgroundTint="#00FFFFFF"
             android:visibility="visible"
-            app:srcCompat="@drawable/ic_unlock"/>
+            app:srcCompat="@drawable/ic_unlock" />
 
         <ImageButton
             android:id="@+id/lock_Button"
