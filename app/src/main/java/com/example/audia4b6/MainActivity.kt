@@ -9,8 +9,11 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.ImageButton
+import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -25,10 +28,15 @@ class MainActivity : Activity() {
     private val uuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB") // Standard-UUID für SPP
     private val PERMISSION_REQUEST_CODE = 1
     private var isConnected: Boolean = false
+    private lateinit var carStatusTextView: TextView
+    private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
+
+        // Initialisiere den TextView für den Status
+        carStatusTextView = findViewById(R.id.carStatusTextView)
 
         val buttonNavigate: ImageButton = findViewById(R.id.nav_map_Button)
         buttonNavigate.setOnClickListener {
@@ -39,27 +47,32 @@ class MainActivity : Activity() {
         // Überprüfe und fordere Berechtigungen an
         checkAndRequestPermissions()
 
-        // Hole den Unlock-Button
+        // Hole den Unlock-Button und setze den OnClickListener
         val unlockButton = findViewById<ImageButton>(R.id.unlock_Button)
         unlockButton.setOnClickListener {
             if (isConnected) {
                 sendBluetoothCommand("ud\n") // Sende "ud" zum Entsperren der Türen
+                carStatusTextView.text = "Status: Unlocked"
             } else {
                 Toast.makeText(this, "Nicht verbunden.", Toast.LENGTH_SHORT).show()
                 Log.e("Bluetooth", "Nicht verbunden.")
             }
         }
 
-        // Hole den Lock-Button
+        // Hole den Lock-Button und setze den OnClickListener
         val lockButton = findViewById<ImageButton>(R.id.lock_Button)
         lockButton.setOnClickListener {
             if (isConnected) {
-                sendBluetoothCommand("ld\n") // Sende "ld" zum Schließen der Türen
+                sendBluetoothCommand("ld\n") // Sende "ld" zum Verriegeln der Türen
+                carStatusTextView.text = "Status: Locked"
             } else {
                 Toast.makeText(this, "Nicht verbunden.", Toast.LENGTH_SHORT).show()
                 Log.e("Bluetooth", "Nicht verbunden.")
             }
         }
+
+        // Starte die Überprüfung auf eingehende Bluetooth-Daten
+        startBluetoothDataCheck()
     }
 
     private fun checkAndRequestPermissions() {
@@ -144,23 +157,34 @@ class MainActivity : Activity() {
         }
     }
 
+    private fun startBluetoothDataCheck() {
+        handler.postDelayed(object : Runnable {
+            override fun run() {
+                checkBle()
+                handler.postDelayed(this, 1000) // Überprüfe alle 1 Sekunde
+            }
+        }, 1000)
+    }
+
     private fun checkBle() {
         val buffer = ByteArray(1024)
         var bytes: Int
 
         try {
-            if (bluetoothSocket!!.inputStream.available() > 0) {
+            if (bluetoothSocket != null && bluetoothSocket!!.inputStream.available() > 0) {
                 bytes = bluetoothSocket!!.inputStream.read(buffer)
                 val incomingMessage = String(buffer, 0, bytes).trim()
 
                 when (incomingMessage) {
                     "Türen entsperrt" -> {
                         runOnUiThread {
+                            carStatusTextView.text = "Status: Unlocked"
                             Toast.makeText(this, "Türen erfolgreich entsperrt", Toast.LENGTH_SHORT).show()
                         }
                     }
                     "Türen verriegelt" -> {
                         runOnUiThread {
+                            carStatusTextView.text = "Status: Locked"
                             Toast.makeText(this, "Türen erfolgreich verriegelt", Toast.LENGTH_SHORT).show()
                         }
                     }
@@ -176,11 +200,15 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (!isConnected) {
+            initializeBluetooth()
+        }
         Log.d("MainActivity", "Activity is resumed")
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        handler.removeCallbacksAndMessages(null)
         try {
             bluetoothSocket?.close()
         } catch (e: IOException) {
