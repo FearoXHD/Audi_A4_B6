@@ -1,57 +1,33 @@
 package com.example.audia4b6
 
 import android.Manifest
-import android.app.NotificationManager
+import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothGatt
-import android.bluetooth.le.BluetoothLeScanner
-import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanResult
-import android.companion.AssociationInfo
-import android.companion.AssociationRequest
-import android.companion.BluetoothDeviceFilter
-import android.companion.CompanionDeviceManager
+import android.bluetooth.BluetoothSocket
 import android.content.Intent
-import android.content.IntentSender
-import android.content.SharedPreferences
 import android.content.pm.PackageManager
-import android.net.MacAddress
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.ImageButton
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.annotation.RequiresApi
-import androidx.appcompat.app.AppCompatDelegate
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Modifier
+import android.widget.Toast
 import androidx.core.app.ActivityCompat
-import java.util.concurrent.Executor
-import java.util.regex.Pattern
+import androidx.core.content.ContextCompat
+import java.io.IOException
+import java.util.*
 
-//TODO: Scan only while in app, save mac, try to connect to saved mac every sec or use some
-//  system event
-@Suppress("DEPRECATION")
-class MainActivity : ComponentActivity() {
+class MainActivity : Activity() {
 
-    private lateinit var bluetoothAdapter: BluetoothAdapter
-    private lateinit var sharedPreferences: SharedPreferences
-    //private lateinit var deviceManager: CompanionDeviceManager
-
-    private val deviceManager: CompanionDeviceManager by lazy {
-        getSystemService(COMPANION_DEVICE_SERVICE) as CompanionDeviceManager
-    }
-
-    private val executor: Executor =  Executor { it.run() }
-
-    private var bluetoothGatt: BluetoothGatt? = null
+    private var bluetoothAdapter: BluetoothAdapter? = null
+    private var bluetoothSocket: BluetoothSocket? = null
+    private val deviceAddress = "88:13:BF:69:3A:86" // Ersetze dies durch die gefundene MAC-Adresse
+    private val uuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB") // Standard-UUID für SPP
+    private val PERMISSION_REQUEST_CODE = 1
+    private var isConnected: Boolean = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
         setContentView(R.layout.activity_main)
 
         val buttonNavigate: ImageButton = findViewById(R.id.nav_map_Button)
@@ -60,181 +36,155 @@ class MainActivity : ComponentActivity() {
             startActivity(intent)
         }
 
+        // Überprüfe und fordere Berechtigungen an
+        checkAndRequestPermissions()
 
-        sharedPreferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
-
-        // Initialize Bluetooth
-        //val bluetoothManager = getSystemService(BLUETOOTH_SERVICE) as BluetoothManager
-        //bluetoothAdapter = bluetoothManager.adapter
-
-        Log.i("MyTag", "Requesting permissions")
-        // Request necessary permissions
-        ActivityCompat.requestPermissions(
-            this,
-            arrayOf(
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.BLUETOOTH_CONNECT,
-                Manifest.permission.POST_NOTIFICATIONS
-            ),
-            1001
-        )
-    }
-
-    @Deprecated("This method has been deprecated in favor of using the Activity Result API\n      which brings increased type safety via an {@link ActivityResultContract} and the prebuilt\n      contracts for common intents available in\n      {@link androidx.activity.result.contract.ActivityResultContracts}, provides hooks for\n      testing, and allow receiving results in separate, testable classes independent from your\n      activity. Use\n      {@link #registerForActivityResult(ActivityResultContract, ActivityResultCallback)} passing\n      in a {@link RequestMultiplePermissions} object for the {@link ActivityResultContract} and\n      handling the result in the {@link ActivityResultCallback#onActivityResult(Object) callback}.")
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-
-        if (requestCode == 1001) {
-            // Check if all permissions are granted
-            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
-                // All permissions granted, log the message
-                Log.i("MyTag", "Starting Scan")
-                if (!isDeviceAssociated()) {
-                    associateBle()
-                } else {
-                    // Device is already associated, handle accordingly
-                }
+        // Hole den Unlock-Button
+        val unlockButton = findViewById<ImageButton>(R.id.unlock_Button)
+        unlockButton.setOnClickListener {
+            if (isConnected) {
+                sendBluetoothCommand("ud\n") // Sende "ud" zum Entsperren der Türen
             } else {
-                // Handle the case where permissions are denied
-                Log.i("MyTag", "Permissions not granted, scan cannot start")
+                Toast.makeText(this, "Nicht verbunden.", Toast.LENGTH_SHORT).show()
+                Log.e("Bluetooth", "Nicht verbunden.")
+            }
+        }
+
+        // Hole den Lock-Button
+        val lockButton = findViewById<ImageButton>(R.id.lock_Button)
+        lockButton.setOnClickListener {
+            if (isConnected) {
+                sendBluetoothCommand("ld\n") // Sende "ld" zum Schließen der Türen
+            } else {
+                Toast.makeText(this, "Nicht verbunden.", Toast.LENGTH_SHORT).show()
+                Log.e("Bluetooth", "Nicht verbunden.")
             }
         }
     }
 
-    private fun associateBle()
-    {
-        NotificationHelper.createNotificationChannel(this@MainActivity, "system", "System Notifications",
-            "System Notifications", NotificationManager.IMPORTANCE_LOW)
-        NotificationHelper.sendNotification(this@MainActivity, "system", "Started association", "Started scanning for BLE devices...",
-            1, R.drawable.ic_launcher_foreground
-        )
+    private fun checkAndRequestPermissions() {
+        val permissionsNeeded = mutableListOf<String>()
 
-        val deviceFilter: BluetoothDeviceFilter = BluetoothDeviceFilter.Builder()
-            // Match only Bluetooth devices whose name matches the pattern.
-            .setNamePattern(Pattern.compile("DSD TECH"))
-            .build()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                permissionsNeeded.add(Manifest.permission.BLUETOOTH_SCAN)
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                permissionsNeeded.add(Manifest.permission.BLUETOOTH_CONNECT)
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH) != PackageManager.PERMISSION_GRANTED) {
+                permissionsNeeded.add(Manifest.permission.BLUETOOTH)
+            }
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_ADMIN) != PackageManager.PERMISSION_GRANTED) {
+                permissionsNeeded.add(Manifest.permission.BLUETOOTH_ADMIN)
+            }
+        }
 
-        val pairingRequest: AssociationRequest = AssociationRequest.Builder()
-            // Find only devices that match this request filter.
-            .addDeviceFilter(deviceFilter)
-            // Stop scanning as soon as one device matching the filter is found.
-            .setSingleDevice(true)
-            .build()
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            permissionsNeeded.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
 
-        deviceManager.associate(pairingRequest,
-            executor,
-            object : CompanionDeviceManager.Callback() {
-                // Called when a device is found. Launch the IntentSender so the user
-                // can select the device they want to pair with.
-                override fun onAssociationPending(intentSender: IntentSender) {
-                    NotificationHelper.sendNotification(this@MainActivity, "system", "Association Pending", "Association Pending...",
-                        1,
-                        R.drawable.ic_launcher_foreground
-                    )
-
-                    startIntentSenderForResult(intentSender, 0, null, 0, 0, 0)
-                }
-
-                override fun onAssociationCreated(associationInfo: AssociationInfo) {
-                    // An association is created.
-                    val associationId: Int = associationInfo.id
-                    val macAddress: MacAddress? = associationInfo.deviceMacAddress
-                    saveAssociationInfo(macAddress)
-                    NotificationHelper.sendNotification(this@MainActivity, "system", "Successfully associated ($associationId)", "Successfully associated with $macAddress",
-                        1,
-                        R.drawable.ic_launcher_foreground
-                    )
-                }
-
-                override fun onFailure(errorMessage: CharSequence?) {
-                    // To handle the failure.
-                    NotificationHelper.sendNotification(this@MainActivity, "system", "Association failed", "Failed ($errorMessage)",
-                        1,
-                        R.drawable.ic_launcher_foreground
-                    )
-                }
-
-            })
+        if (permissionsNeeded.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, permissionsNeeded.toTypedArray(), PERMISSION_REQUEST_CODE)
+        } else {
+            initializeBluetooth()
+        }
     }
 
-    @Deprecated("This method has been deprecated in favor of using the Activity Result API\n      which brings increased type safety via an {@link ActivityResultContract} and the prebuilt\n      contracts for common intents available in\n      {@link androidx.activity.result.contract.ActivityResultContracts}, provides hooks for\n      testing, and allow receiving results in separate, testable classes independent from your\n      activity. Use\n      {@link #registerForActivityResult(ActivityResultContract, ActivityResultCallback)}\n      with the appropriate {@link ActivityResultContract} and handling the result in the\n      {@link ActivityResultCallback#onActivityResult(Object) callback}.")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        when (requestCode) {
-            0 -> when(resultCode) {
-                RESULT_OK -> {
-                    // The user chose to pair the app with a Bluetooth device.
-                    val deviceToPair: BluetoothDevice? =
-                        data?.getParcelableExtra(CompanionDeviceManager.EXTRA_DEVICE)
-                    deviceToPair?.let { device ->
-                        if (ActivityCompat.checkSelfPermission(
-                                this,
-                                Manifest.permission.BLUETOOTH_CONNECT
-                            ) != PackageManager.PERMISSION_GRANTED
-                        ) {
-                            return
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == PERMISSION_REQUEST_CODE) {
+            if (grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+                initializeBluetooth()
+            } else {
+                Log.e("Bluetooth", "Berechtigungen wurden verweigert.")
+                Toast.makeText(this, "Berechtigungen wurden verweigert.", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun initializeBluetooth() {
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter()
+
+        if (bluetoothAdapter == null || !bluetoothAdapter!!.isEnabled) {
+            Log.e("Bluetooth", "Bluetooth ist nicht verfügbar oder nicht aktiviert")
+            Toast.makeText(this, "Bluetooth ist nicht verfügbar oder nicht aktiviert", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val device: BluetoothDevice = bluetoothAdapter!!.getRemoteDevice(deviceAddress)
+        try {
+            if (ActivityCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                Log.e("Bluetooth", "Berechtigung zum Verbinden von Bluetooth fehlt.")
+                return
+            }
+            bluetoothSocket = device.createRfcommSocketToServiceRecord(uuid)
+            bluetoothSocket!!.connect()
+            isConnected = true
+            Log.d("Bluetooth", "Bluetooth verbunden")
+            Toast.makeText(this, "Bluetooth verbunden", Toast.LENGTH_SHORT).show()
+        } catch (e: IOException) {
+            Log.e("Bluetooth", "Verbindung fehlgeschlagen: ${e.message}")
+            isConnected = false
+            Toast.makeText(this, "Verbindung fehlgeschlagen", Toast.LENGTH_SHORT).show()
+        } catch (e: SecurityException) {
+            Log.e("Bluetooth", "SecurityException: ${e.message}")
+        }
+    }
+
+    private fun sendBluetoothCommand(command: String) {
+        if (bluetoothSocket != null) {
+            try {
+                bluetoothSocket!!.outputStream.write(command.toByteArray())
+            } catch (e: IOException) {
+                Log.e("Bluetooth", "Fehler beim Senden: ${e.message}")
+                Toast.makeText(this, "Fehler beim Senden: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun checkBle() {
+        val buffer = ByteArray(1024)
+        var bytes: Int
+
+        try {
+            if (bluetoothSocket!!.inputStream.available() > 0) {
+                bytes = bluetoothSocket!!.inputStream.read(buffer)
+                val incomingMessage = String(buffer, 0, bytes).trim()
+
+                when (incomingMessage) {
+                    "Türen entsperrt" -> {
+                        runOnUiThread {
+                            Toast.makeText(this, "Türen erfolgreich entsperrt", Toast.LENGTH_SHORT).show()
                         }
-                        //connectToDevice(device)
-                        deviceManager.startObservingDevicePresence(device.address);
-                        // Maintain continuous interaction with a paired device.
+                    }
+                    "Türen verriegelt" -> {
+                        runOnUiThread {
+                            Toast.makeText(this, "Türen erfolgreich verriegelt", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    else -> {
+                        Log.d("Bluetooth", "Nachricht erhalten: $incomingMessage")
                     }
                 }
             }
-            else -> super.onActivityResult(requestCode, resultCode, data)
+        } catch (e: IOException) {
+            Log.e("Bluetooth", "Fehler beim Lesen: ${e.message}")
         }
     }
 
-    private fun isDeviceAssociated(): Boolean {
-        return sharedPreferences.getBoolean("device_associated", false)
+    override fun onResume() {
+        super.onResume()
+        Log.d("MainActivity", "Activity is resumed")
     }
 
-    private fun saveAssociationInfo(macAddress: MacAddress?) {
-        val editor = sharedPreferences.edit()
-        editor.putBoolean("device_associated", true)
-        editor.putString("device_mac_address", macAddress.toString())
-        editor.apply()
-    }
-
-
-
-    private fun startScanning() {
-        val bluetoothLeScanner: BluetoothLeScanner = bluetoothAdapter.bluetoothLeScanner
-        val leScanCallback = object : ScanCallback() {
-            override fun onScanResult(callbackType: Int, result: ScanResult) {
-                val device: BluetoothDevice = result.device
-
-                if (ActivityCompat.checkSelfPermission(
-                        this@MainActivity,
-                        Manifest.permission.BLUETOOTH_CONNECT
-                    ) != PackageManager.PERMISSION_GRANTED
-                ) {
-                    // TODO: Consider calling
-                    //    ActivityCompat#requestPermissions
-                    Log.i("MyTag", "No BT connect perms")
-                    return
-                }
-
-                if (device.name != null && device.name == "HM-10") {
-                    // Device found, connect to it
-                    //connectToDevice(device)
-                }
-            }
+    override fun onDestroy() {
+        super.onDestroy()
+        try {
+            bluetoothSocket?.close()
+        } catch (e: IOException) {
+            Log.e("Bluetooth", "Fehler beim Schließen: ${e.message}")
         }
-        bluetoothLeScanner.startScan(leScanCallback)
-    }
-
-
-
-
-    @Composable
-    fun Greeting(name: String, modifier: Modifier = Modifier) {
-        Text(
-            text = "Hello $name!",
-            modifier = modifier
-        )
     }
 }

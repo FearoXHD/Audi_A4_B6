@@ -1,7 +1,5 @@
 package com.example.audia4b6
 
-import LocationData
-import LocationService
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -22,12 +20,7 @@ import com.google.android.gms.maps.MapView
 import com.google.android.gms.maps.OnMapReadyCallback
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.CameraPosition
-import com.google.android.gms.maps.model.MarkerOptions
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
+
 
 class MapActivity : AppCompatActivity(), OnMapReadyCallback {
 
@@ -82,8 +75,6 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback {
         fusedLocationProviderClient.requestLocationUpdates(
             locationRequest, locationCallback, Looper.getMainLooper()
         )
-
-        fetchLocationData()  // Abrufen der Standortdaten
     }
 
     private val locationCallback = object : LocationCallback() {
@@ -141,35 +132,6 @@ class MapActivity : AppCompatActivity(), OnMapReadyCallback {
         shouldCenterMap = false
     }
 
-    // Fetch location data from the server
-    private fun fetchLocationData() {
-        val retrofit = Retrofit.Builder()
-            .baseUrl("http://0.0.0.0:8000/")  // URL zu deinem Server
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-
-        val service = retrofit.create(LocationService::class.java)
-        val call = service.getLocation()
-
-        call.enqueue(object : Callback<LocationData> {
-            override fun onResponse(call: Call<LocationData>, response: Response<LocationData>) {
-                if (response.isSuccessful) {
-                    val location = response.body()
-                    location?.let {
-                        val latLng = LatLng(it.latitude, it.longitude)
-                        googleMap?.apply {
-                            addMarker(MarkerOptions().position(latLng).title("ESP32 Location"))
-                            moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
-                        }
-                    }
-                }
-            }
-
-            override fun onFailure(call: Call<LocationData>, t: Throwable) {
-                // Handle failure
-            }
-        })
-    }
 
     override fun onResume() {
         super.onResume()

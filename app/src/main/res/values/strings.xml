@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">Audi A4 B6</string>
+    <string name="unlock_button_description">Unlock the car</string>
+    <string name="lock_button_description">lock the car</string>
+    <string name="car_button_description">Back to Home</string>
+    <string name="nav_map_button_description">brings you to mapview</string>
+    <string name="nav_car_button_description">brings you to MainMenu</string>
+    <string name="climate_button_description">change climate</string>
+    <string name="user_button_description">bring to user menu</string>
+    <string name="car_image_description">Show image of the car</string>
+
 </resources>
+
