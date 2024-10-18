@@ -6,10 +6,13 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
-import android.widget.Button
+import android.view.MotionEvent
+import android.view.View
 import android.widget.ImageButton
+import android.widget.Switch
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -19,6 +22,8 @@ class LightActivity : AppCompatActivity() {
 
     private val REQUEST_CODE_PERMISSIONS = 1001
     private lateinit var bluetoothController: BluetoothController // BluetoothController-Instanz
+
+    private var selectedColor: Int = Color.RED
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,15 +35,28 @@ class LightActivity : AppCompatActivity() {
         // Berechtigungen überprüfen und anfordern
         checkAndRequestPermissions()
 
-        // Beispiel-Schaltflächen zum Ein- und Ausschalten der LED
-        findViewById<Button>(R.id.btnTurnOn).setOnClickListener {
-            sendCommand("ON") // LED einschalten
+        // LED Switch einrichten
+        val ledSwitch = findViewById<Switch>(R.id.switchLed)
+        ledSwitch.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked) {
+                sendCommand("ON") // LED einschalten
+            } else {
+                sendCommand("OFF") // LED ausschalten
+            }
         }
 
-        findViewById<Button>(R.id.btnTurnOff).setOnClickListener {
-            sendCommand("OFF") // LED ausschalten
+        // Color Picker Wheel einrichten
+        val colorPickerWheel = findViewById<ColorPickerView>(R.id.colorPickerWheel)
+        colorPickerWheel.setOnTouchListener { _, event ->
+            if (event.action == MotionEvent.ACTION_MOVE || event.action == MotionEvent.ACTION_DOWN) {
+                selectedColor = colorPickerWheel.getColorAtPosition(event.x, event.y)
+                updateColorPreview(selectedColor) // Update the preview with the selected color
+                sendCommand("COLOR:${selectedColor.toString()}") // Sende die ausgewählte Farbe an dein Gerät
+            }
+            true
         }
 
+        // Navigation zu MainActivity
         val buttonNavigateCar: ImageButton = findViewById(R.id.nav_car_Button)
         buttonNavigateCar.setOnClickListener {
             val intent = Intent(this, MainActivity::class.java)
@@ -93,6 +111,11 @@ class LightActivity : AppCompatActivity() {
     private fun sendCommand(command: String) {
         // Hier die Logik zum Senden von Befehlen an das LED-Gerät einfügen
         bluetoothController.sendCommand(command) // Verwende die sendCommand-Methode des BluetoothController
+    }
+
+    private fun updateColorPreview(color: Int) {
+        val colorPreview = findViewById<View>(R.id.colorPreview)
+        colorPreview.setBackgroundColor(color) // Setze die Hintergrundfarbe des Vorschau-Views
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
