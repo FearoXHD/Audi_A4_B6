@@ -24,7 +24,7 @@ class MainActivity : Activity() {
 
     private var bluetoothAdapter: BluetoothAdapter? = null
     private var bluetoothSocket: BluetoothSocket? = null
-    private val deviceAddress = "88:13:BF:69:3A:86" // Ersetze dies durch die gefundene MAC-Adresse
+    private val deviceAddress = "88:13:BF:61:95:2A" // Ersetze dies durch die gefundene MAC-Adresse
     private val uuid: UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB") // Standard-UUID für SPP
     private val PERMISSION_REQUEST_CODE = 1
     private var isConnected: Boolean = false
@@ -37,12 +37,20 @@ class MainActivity : Activity() {
 
         // Initialisiere den TextView für den Status
         carStatusTextView = findViewById(R.id.carStatusTextView)
+        carStatusTextView.text = "Status: Unknown" // Initialer Status auf "Unknown" setzen
 
         val buttonNavigate: ImageButton = findViewById(R.id.nav_map_Button)
         buttonNavigate.setOnClickListener {
             val intent = Intent(this, MapActivity::class.java)
             startActivity(intent)
         }
+
+        val buttonLight: ImageButton = findViewById(R.id.light_Button)
+        buttonLight.setOnClickListener {
+            val intent = Intent(this, LightActivity::class.java)
+            startActivity(intent)
+        }
+
 
         // Überprüfe und fordere Berechtigungen an
         checkAndRequestPermissions()
@@ -137,6 +145,9 @@ class MainActivity : Activity() {
             isConnected = true
             Log.d("Bluetooth", "Bluetooth verbunden")
             Toast.makeText(this, "Bluetooth verbunden", Toast.LENGTH_SHORT).show()
+
+            // Status abfragen, sobald die Verbindung hergestellt ist
+            sendBluetoothCommand("ds\n")
         } catch (e: IOException) {
             Log.e("Bluetooth", "Verbindung fehlgeschlagen: ${e.message}")
             isConnected = false
@@ -145,6 +156,7 @@ class MainActivity : Activity() {
             Log.e("Bluetooth", "SecurityException: ${e.message}")
         }
     }
+
 
     private fun sendBluetoothCommand(command: String) {
         if (bluetoothSocket != null) {
@@ -175,17 +187,16 @@ class MainActivity : Activity() {
                 bytes = bluetoothSocket!!.inputStream.read(buffer)
                 val incomingMessage = String(buffer, 0, bytes).trim()
 
+                // Status abhängig von der Nachricht setzen
                 when (incomingMessage) {
-                    "Türen entsperrt" -> {
-                        runOnUiThread {
-                            carStatusTextView.text = "Status: Unlocked"
-                            Toast.makeText(this, "Türen erfolgreich entsperrt", Toast.LENGTH_SHORT).show()
-                        }
-                    }
-                    "Türen verriegelt" -> {
+                    "Türen Gesperrt" -> {
                         runOnUiThread {
                             carStatusTextView.text = "Status: Locked"
-                            Toast.makeText(this, "Türen erfolgreich verriegelt", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    "Türen Entsperrt" -> {
+                        runOnUiThread {
+                            carStatusTextView.text = "Status: Unlocked"
                         }
                     }
                     else -> {
@@ -197,6 +208,7 @@ class MainActivity : Activity() {
             Log.e("Bluetooth", "Fehler beim Lesen: ${e.message}")
         }
     }
+
 
     override fun onResume() {
         super.onResume()

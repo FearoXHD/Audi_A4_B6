@@ -106,12 +106,12 @@
             android:src="@drawable/ic_lock" />
 
         <ImageButton
-            android:id="@+id/climate_Button"
+            android:id="@+id/light_Button"
             android:layout_width="116dp"
             android:layout_height="match_parent"
             android:background="@drawable/button_background"
-            android:contentDescription="@string/climate_button_description"
-            android:src="@drawable/ic_climate" />
+            android:contentDescription="@string/light_button_description"
+            android:src="@drawable/light" />
 
     </LinearLayout>
 
